@@ -8,5 +8,25 @@
     "name": "telegram.bot.username",
     "type": "java.lang.String",
     "description": "A description for 'telegram.bot.username'"
+  },
+  {
+    "name": "openrouter.api.key",
+    "type": "java.lang.String",
+    "description": "A description for 'openrouter.api.key'"
+  },
+  {
+    "name": "openrouter.model",
+    "type": "java.lang.String",
+    "description": "A description for 'openrouter.model'"
+  },
+  {
+    "name": "spring.ai.openai.image.enabled",
+    "type": "java.lang.String",
+    "description": "A description for 'spring.ai.openai.image.enabled'"
+  },
+  {
+    "name": "spring.ai.openai.embedding.enabled",
+    "type": "java.lang.String",
+    "description": "A description for 'spring.ai.openai.embedding.enabled'"
   }
 ]}
