@@ -1,4 +1,4 @@
-# DiscoveryBot 🤖
+# DiscoveryBot
 
 A Telegram bot that lets group members save and query discoveries (food places, travel destinations, books, songs, videos, articles, etc.) using `/save` and natural language `/query`.
 
@@ -72,7 +72,7 @@ A Telegram bot that lets group members save and query discoveries (food places, 
 **Save a discovery:**
 ```
 User: /save https://www.example-restaurant.com
-Bot: ✅ Saved! Amazing Italian restaurant near downtown with 4.8★ rating
+Bot: Saved! Amazing Italian restaurant near downtown with 4.8★ rating
 ```
 
 **Query discoveries:**
@@ -108,10 +108,6 @@ Bot: Based on your saved discoveries, here are the best places:
 **PostgreSQL connection error?**
 - Ensure `.env` has correct `POSTGRES_USER` and `POSTGRES_PASSWORD`
 - Restart PostgreSQL: `docker-compose restart postgres`
-
-## License
-
-[Your License Here]
 
 ---
 
