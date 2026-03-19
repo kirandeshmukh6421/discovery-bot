@@ -2,6 +2,7 @@ package com.discoverybot.service.impl;
 
 import com.discoverybot.dto.EnrichmentResult;
 import com.discoverybot.service.EnricherService;
+import com.discoverybot.service.enricher.GooglePlacesEnricher;
 import com.discoverybot.service.enricher.YouTubeEnricher;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -20,27 +21,37 @@ public class EnricherServiceImpl implements EnricherService {
             Pattern.compile("https?://[^\\s]+", Pattern.CASE_INSENSITIVE);
 
     private final YouTubeEnricher youTubeEnricher;
+    private final GooglePlacesEnricher googlePlacesEnricher;
 
-    public EnricherServiceImpl(YouTubeEnricher youTubeEnricher) {
+    public EnricherServiceImpl(YouTubeEnricher youTubeEnricher,
+                               GooglePlacesEnricher googlePlacesEnricher) {
         this.youTubeEnricher = youTubeEnricher;
+        this.googlePlacesEnricher = googlePlacesEnricher;
     }
 
     @Override
-    public EnrichmentResult enrich(String url) {
+    public EnrichmentResult enrich(String url, String userNote) {
         LinkType linkType = detectLinkType(url);
         log.info("Enrichment requested for {} link: {}", linkType, url);
 
         if (linkType == LinkType.YOUTUBE) {
-            return youTubeEnricher.enrich(url)
+            return youTubeEnricher.enrich(url, userNote)
                     .orElseGet(() -> {
-                        log.debug("YouTube enricher returned empty for {} — requesting user description", url);
-                        return EnrichmentResult.askUser();
+                        log.warn("YouTube enricher failed for {}", url);
+                        return EnrichmentResult.failed("Couldn't fetch details from YouTube");
                     });
         }
 
-        // Phase 4: Google Places enricher — coming next
+        if (linkType == LinkType.GOOGLE_MAPS) {
+            return googlePlacesEnricher.enrich(url, userNote)
+                    .orElseGet(() -> {
+                        log.warn("Google Places enricher failed for {}", url);
+                        return EnrichmentResult.failed("Couldn't fetch details from Google Maps");
+                    });
+        }
+
         // Phase 5: Open Graph enricher — coming next
-        log.debug("No enricher matched for {} — requesting user description", url);
+        log.info("No specific enricher for {} — falling through to user description", url);
         return EnrichmentResult.askUser();
     }
 
