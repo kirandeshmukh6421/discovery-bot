@@ -39,25 +39,27 @@ public class YouTubeEnricher {
         this.openRouterService = openRouterService;
     }
 
-    public Optional<EnrichmentResult> enrich(String url) {
+    public Optional<EnrichmentResult> enrich(String url, String userNote) {
         if (isPlaylistUrl(url)) {
             String playlistId = extractPlaylistId(url);
             if (playlistId == null) {
-                log.debug("Could not extract playlist ID from URL: {}", url);
+                log.warn("Could not extract playlist ID from URL: {}", url);
                 return Optional.empty();
             }
-            return enrichPlaylist(url, playlistId);
+            log.info("Fetching YouTube playlist: {}", playlistId);
+            return enrichPlaylist(url, playlistId, userNote);
         }
 
         String videoId = extractVideoId(url);
         if (videoId == null) {
-            log.debug("Could not extract video ID from URL: {}", url);
+            log.warn("Could not extract video ID from URL: {}", url);
             return Optional.empty();
         }
-        return enrichVideo(url, videoId);
+        log.info("Fetching YouTube video: {}", videoId);
+        return enrichVideo(url, videoId, userNote);
     }
 
-    private Optional<EnrichmentResult> enrichVideo(String url, String videoId) {
+    private Optional<EnrichmentResult> enrichVideo(String url, String videoId, String userNote) {
         try {
             YouTubeApiResponse response = webClient.get()
                     .uri(uriBuilder -> uriBuilder
@@ -71,25 +73,27 @@ public class YouTubeEnricher {
                     .block();
 
             if (response == null || response.items() == null || response.items().isEmpty()) {
-                log.debug("YouTube API returned no results for video ID: {}", videoId);
+                log.warn("YouTube API returned no results for video ID: {} — video may be private or deleted", videoId);
                 return Optional.empty();
             }
 
             YouTubeVideoItem item = response.items().get(0);
-            ExtractionResult extraction = videoToExtractionResult(item);
+            log.info("Fetched video: {} by {}", item.snippet().title(), item.snippet().channelTitle());
+
+            ExtractionResult extraction = videoToExtractionResult(item, userNote);
             if (extraction == null) {
-                log.warn("OpenRouter returned null for YouTube video: {}", url);
+                log.error("OpenRouter extraction returned null for YouTube video: {}", url);
                 return Optional.empty();
             }
             return Optional.of(EnrichmentResult.success(extraction, Source.YOUTUBE));
 
         } catch (Exception e) {
-            log.warn("YouTube video enrichment failed for URL {}: {}", url, e.getMessage());
+            log.error("YouTube video enrichment failed for URL {}: {}", url, e.getMessage(), e);
             return Optional.empty();
         }
     }
 
-    private Optional<EnrichmentResult> enrichPlaylist(String url, String playlistId) {
+    private Optional<EnrichmentResult> enrichPlaylist(String url, String playlistId, String userNote) {
         try {
             YouTubePlaylistResponse response = webClient.get()
                     .uri(uriBuilder -> uriBuilder
@@ -103,37 +107,42 @@ public class YouTubeEnricher {
                     .block();
 
             if (response == null || response.items() == null || response.items().isEmpty()) {
-                log.debug("YouTube API returned no results for playlist ID: {}", playlistId);
+                log.warn("YouTube API returned no results for playlist ID: {} — playlist may be private or deleted", playlistId);
                 return Optional.empty();
             }
 
             YouTubePlaylistItem item = response.items().get(0);
-            ExtractionResult extraction = playlistToExtractionResult(item);
+            log.info("Fetched playlist: {} by {} ({} videos)",
+                    item.snippet().title(), item.snippet().channelTitle(),
+                    item.contentDetails() != null ? item.contentDetails().itemCount() : "?");
+
+            ExtractionResult extraction = playlistToExtractionResult(item, userNote);
             if (extraction == null) {
-                log.warn("OpenRouter returned null for YouTube playlist: {}", url);
+                log.error("OpenRouter extraction returned null for YouTube playlist: {}", url);
                 return Optional.empty();
             }
             return Optional.of(EnrichmentResult.success(extraction, Source.YOUTUBE));
 
         } catch (Exception e) {
-            log.warn("YouTube playlist enrichment failed for URL {}: {}", url, e.getMessage());
+            log.error("YouTube playlist enrichment failed for URL {}: {}", url, e.getMessage(), e);
             return Optional.empty();
         }
     }
 
-    private ExtractionResult videoToExtractionResult(YouTubeVideoItem item) {
+    private ExtractionResult videoToExtractionResult(YouTubeVideoItem item, String userNote) {
         YouTubeSnippet snippet = item.snippet();
-        String content = buildVideoContent(snippet.title(), snippet.channelTitle(), snippet.description());
+        String content = buildVideoContent(snippet.title(), snippet.channelTitle(), snippet.description(), userNote);
         return withChannel(openRouterService.extractDiscovery(content), snippet.channelTitle());
     }
 
-    private ExtractionResult playlistToExtractionResult(YouTubePlaylistItem item) {
+    private ExtractionResult playlistToExtractionResult(YouTubePlaylistItem item, String userNote) {
         YouTubeSnippet snippet = item.snippet();
         int count = item.contentDetails() != null ? item.contentDetails().itemCount() : 0;
         String content = buildVideoContent(
                 snippet.title() + " (" + count + " videos)",
                 snippet.channelTitle(),
-                snippet.description()
+                snippet.description(),
+                userNote
         );
         return withChannel(openRouterService.extractDiscovery(content), snippet.channelTitle());
     }
@@ -145,22 +154,20 @@ public class YouTubeEnricher {
         return new ExtractionResult(result.category(), result.summary(), tags, result.isPhysicalLocation());
     }
 
-    private String buildVideoContent(String title, String channel, String description) {
+    private String buildVideoContent(String title, String channel, String description, String userNote) {
         StringBuilder sb = new StringBuilder();
         if (title != null) sb.append("Title: ").append(title).append("\n");
         if (channel != null) sb.append("Channel: ").append(channel).append("\n");
         if (description != null && !description.isBlank()) {
-            // YouTube descriptions can be very long — trim to first 1000 chars
             String trimmed = description.length() > 500 ? description.substring(0, 1000) + "..." : description;
-            sb.append("Description: ").append(trimmed);
+            sb.append("Description: ").append(trimmed).append("\n");
+        }
+        if (userNote != null && !userNote.isBlank()) {
+            sb.append("User note: ").append(userNote);
         }
         return sb.toString();
     }
 
-    /**
-     * A URL is treated as a playlist only if the path is /playlist.
-     * watch?v=...&list=... is treated as a video, not a playlist.
-     */
     private boolean isPlaylistUrl(String url) {
         try {
             String path = URI.create(url).getPath();
@@ -180,7 +187,7 @@ public class YouTubeEnricher {
                 }
             }
         } catch (Exception e) {
-            log.debug("Failed to parse playlist URL: {}", url);
+            log.warn("Failed to parse playlist URL {}: {}", url, e.getMessage());
         }
         return null;
     }
@@ -217,7 +224,7 @@ public class YouTubeEnricher {
                 }
             }
         } catch (Exception e) {
-            log.debug("Failed to parse YouTube URL: {}", url);
+            log.warn("Failed to parse YouTube URL {}: {}", url, e.getMessage());
         }
         return null;
     }
