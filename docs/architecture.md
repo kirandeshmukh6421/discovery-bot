@@ -33,8 +33,9 @@ EnricherServiceImpl.enrich(url, userNote?)
 YOUTUBE        GOOGLE_MAPS    GENERIC_URL
     |               |             |
     v               v             v
-YouTubeEnricher  GooglePlaces  [Phase 5]
-    |            Enricher      OpenGraph
+YouTubeEnricher  GooglePlaces  OpenGraph
+    |            Enricher      Enricher
+    |               |          (Jsoup)
     |               |
     |   resolve short link
     |               |
@@ -58,9 +59,9 @@ OpenRouterService.extractDiscovery(apiData + userNote?)
          v
   "Saved! <summary>"
 
-On enricher failure:
+On enricher failure (YouTube/Maps):
   "Could not fetch details. Tell me about it in your own words"
-On no enricher (generic URL, pre-Phase 5):
+On Open Graph unusable (login wall / blank):
   "Tell me about this in your own words"
 ```
 
@@ -112,6 +113,7 @@ getOrCreate  getOrCreate
 | `EnricherServiceImpl` | Detect link type, route to correct enricher |
 | `YouTubeEnricher` | Fetch video/playlist data from YouTube API |
 | `GooglePlacesEnricher` | Resolve Maps links, fetch place data from Places API |
+| `OpenGraphEnricher` | Scrape og:title/description/site_name from generic URLs via Jsoup |
 | `OpenRouterServiceImpl` | All AI calls — extraction and querying |
 | `DiscoveryEntryServiceImpl` | Persist to PostgreSQL |
 | `UserServiceImpl` | Auto-register users by Telegram ID |
@@ -174,6 +176,35 @@ GooglePlacesEnricher
 
 ---
 
+## Data Flow for an Open Graph Save
+
+```
+/save https://some-article.com my favourite read
+         |
+         v
+EnricherServiceImpl --> GENERIC_URL
+         |
+         v
+OpenGraphEnricher
+  Jsoup.connect(url).userAgent("Mozilla/5.0 ...").get()
+         |
+         v
+  og:title + og:description + og:site_name
+         |
+  useful? (title or description non-blank)
+    yes  |  no
+    |    v
+    |  return empty --> EnrichmentResult.askUser()
+    |                   "Tell me about this in your own words"
+    v
+  OpenRouter --> category, summary, tags, isPhysicalLocation
+         |
+         v
+  DiscoveryEntryService.save(source=OPEN_GRAPH)
+```
+
+---
+
 ## Database Schema
 
 ```
@@ -201,7 +232,7 @@ discovery_entries
 | 2 | done | User and Group auto-registration |
 | 3 | done | /save command, enrichment chain skeleton, AI extraction |
 | 4 | done | YouTube and Google Places enrichers |
-| 5 | next | Open Graph enricher (Jsoup) |
+| 5 | done | Open Graph enricher (Jsoup) |
 | 6 | - | Conversation state management + timeout |
 | 7 | done | Persist to PostgreSQL with JSONB |
 | 8 | - | /query with two-stage AI reasoning |
