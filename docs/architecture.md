@@ -1,139 +1,210 @@
-# DiscoveryBot — Code Walkthrough
-
-A living document explaining what each file does and how the pieces fit together.
+# DiscoveryBot — Architecture
 
 ---
 
-## Entry Points
+## Save Flow
 
-### `DiscoveryBotApplication.java`
-Spring Boot entry point. Sets the default JVM timezone to `Asia/Kolkata` before the context starts so all `LocalDateTime` values stored in the DB are in IST.
+```
+User: /save <input>
+         |
+         v
+  Extract URL from input?
+         |
+    yes  |  no
+    -----+-----
+    |          |
+    v          v
+URL+note?   Plain text
+    |          |
+    |          v
+    |      OpenRouterService.extractDiscovery()
+    |          |
+    |          v
+    |       Save (AI_EXTRACTED)
+    |
+    v
+EnricherServiceImpl.enrich(url, userNote?)
+         |
+   detectLinkType()
+         |
+    -----+----------+-------------+
+    |               |             |
+    v               v             v
+YOUTUBE        GOOGLE_MAPS    GENERIC_URL
+    |               |             |
+    v               v             v
+YouTubeEnricher  GooglePlaces  [Phase 5]
+    |            Enricher      OpenGraph
+    |               |
+    |   resolve short link
+    |               |
+    |   coords?----yes----> searchNearby (50m)
+    |   |                        |
+    |   no                       |
+    |   |                        |
+    |   v                        |
+    | searchText <---------------+
+    |
+    v (both enrichers)
+OpenRouterService.extractDiscovery(apiData + userNote?)
+         |
+         v
+   ExtractionResult
+(category, summary, tags, isPhysicalLocation)
+         |
+         v
+  DiscoveryEntryService.save()
+         |
+         v
+  "Saved! <summary>"
 
----
-
-### `bot/DiscoveryBot.java`
-The core bot class. Extends `TelegramLongPollingBot` from the telegrambots library.
-
-**Long polling** means the app repeatedly asks Telegram "any new messages?" on a background thread — no public URL needed, works locally.
-
-Key things:
-- Constructor takes `botToken` and `botUsername` from `application.properties` via `@Value`
-- `super(botToken)` authenticates the bot with Telegram's API
-- `onUpdateReceived(Update update)` is called by the library every time a message arrives
-- An `Update` can be anything — text, photo, button click. The guard `!update.hasMessage() || !update.getMessage().hasText()` ignores everything that isn't plain text
-- On every message: calls `UserService.getOrCreate()` → `GroupService.getOrCreate()` → `GroupService.registerUserInGroup()` to auto-register
-- `chatId` identifies where to send the reply back (group or DM)
-- `execute(SendMessage)` makes the actual HTTP call to Telegram's API — inherited from parent
-- Send errors are caught and logged — never crashes the bot
-
-**Phase 3+**: Will route commands (`/save`, `/query`, etc.) to `CommandHandlerService`.
-
----
-
-## Config
-
-### `config/BotConfig.java`
-Registers the bot with Telegram on startup.
-
-- `TelegramBotsApi` is the library's central registry
-- `DefaultBotSession` starts the background long-polling thread
-- `registerBot(discoveryBot)` hands the bot instance to that session so it starts receiving updates
-- Without this file, `DiscoveryBot` exists as a Spring bean but never connects to Telegram
-
-### `config/AppConfig.java`
-Declares a shared `WebClient.Builder` bean used by all services that make external HTTP calls (enrichers, OpenRouterService, etc.). Consumers inject the builder and call `.build()` to get their own configured `WebClient` instance.
-
----
-
-## Services
-
-### `service/UserService.java` (interface)
-Contract for user identity resolution. Single method: `getOrCreate(telegramUser)`.
-
-### `service/impl/UserServiceImpl.java`
-- Looks up user by `telegram_id` (Telegram's stable numeric ID)
-- If not found, inserts a new row with first + last name and Telegram username
-- First contact is invisible to the user — no welcome message, just silent registration
-- `buildDisplayName()` concatenates first + optional last name
-
-### `service/GroupService.java` (interface)
-Contract for group identity resolution and membership management. Methods:
-- `getOrCreate(chat)` — upsert group
-- `registerUserInGroup(user, group)` — upsert membership with role
-- `getUserRole(user, group)` — return ADMIN or MEMBER
-
-### `service/impl/GroupServiceImpl.java`
-- `getOrCreate()`: looks up group by `telegram_group_id`; inserts on first encounter
-- `registerUserInGroup()`: idempotent — exits early if membership already exists. First user in a group → `ADMIN`, rest → `MEMBER`
-- `getUserRole()`: returns role from `user_groups`; falls back to `MEMBER` if no record
-
-**Future services** (not yet implemented):
-
-| Service | Phase | Purpose |
-|---|---|---|
-| `CommandHandlerService` | 3 | Routes `/save`, `/query`, etc. |
-| `ConversationStateService` | 6 | Tracks WAITING_FOR_USER_DESCRIPTION state per user |
-| `OpenRouterService` | 3 | All AI calls via OpenRouter API |
-| `EnricherService` | 3 | Orchestrates the enrichment chain |
-| `DiscoveryEntryService` | 7 | Persists discovery entries |
-| `QueryService` | 8 | AI-powered querying over saved entries |
+On enricher failure:
+  "Could not fetch details. Tell me about it in your own words"
+On no enricher (generic URL, pre-Phase 5):
+  "Tell me about this in your own words"
+```
 
 ---
 
-## Enrichers (Phase 4–5)
+## Query Flow (Phase 8)
 
-| Enricher | Triggers on |
+```
+User: /query <natural language>
+         |
+         v
+Stage 1: AI extracts filters (category, tags, location, date range)
+         |
+         v
+Stage 2: Java builds parameterized SQL scoped to group_id
+         |
+         v
+Stage 3: AI reasons over result set, replies conversationally
+```
+
+---
+
+## Auth Model
+
+```
+Any message received
+         |
+    -----+-----
+    |          |
+    v          v
+UserService  GroupService
+getOrCreate  getOrCreate
+         |
+         v
+  registerUserInGroup()
+         |
+  first user in group? --> ADMIN
+  else               --> MEMBER
+```
+
+---
+
+## Component Responsibilities
+
+| Component | Responsibility |
 |---|---|
-| `GooglePlacesEnricher` | Google Maps links or AI-detected physical locations |
-| `YouTubeEnricher` | YouTube links → title, channel, duration, views |
-| `SpotifyEnricher` | Spotify links |
-| `OpenGraphEnricher` | Any URL → og:title, og:description via Jsoup |
+| `DiscoveryBot` | Receive Telegram updates, route to handlers |
+| `CommandHandlerServiceImpl` | Parse commands, orchestrate save/query flow |
+| `EnricherServiceImpl` | Detect link type, route to correct enricher |
+| `YouTubeEnricher` | Fetch video/playlist data from YouTube API |
+| `GooglePlacesEnricher` | Resolve Maps links, fetch place data from Places API |
+| `OpenRouterServiceImpl` | All AI calls — extraction and querying |
+| `DiscoveryEntryServiceImpl` | Persist to PostgreSQL |
+| `UserServiceImpl` | Auto-register users by Telegram ID |
+| `GroupServiceImpl` | Auto-register groups, manage roles |
 
 ---
 
-## Models
+## Data Flow for a YouTube Save
 
-### `model/User.java`
-Maps to the `users` table. Fields: `id`, `telegram_id` (unique), `name`, `username`, `created_at`.
-`telegram_id` is Telegram's own numeric user ID — used as the lookup key.
-
-### `model/Group.java`
-Maps to the `groups` table. Fields: `id`, `telegram_group_id` (unique), `name`, `created_at`.
-Works for both group chats (negative IDs) and private DMs (positive IDs).
-
-### `model/Role.java`
-Enum: `ADMIN` | `MEMBER`. Stored as a string in the `user_groups.role` column.
-
-### `model/UserGroup.java`
-Join table `user_groups` — links a `User` to a `Group` with a `Role`.
-Has a unique constraint on `(user_id, group_id)` to prevent duplicate memberships.
-
-### `model/DiscoveryEntry.java` _(Phase 7)_
-Stores saved discoveries. Includes a JSONB `extracted_data` column for flexible AI-extracted metadata.
-
----
-
-## State
-
-### `state/ConversationState.java` _(Phase 6)_
-Enum: `IDLE`, `WAITING_FOR_USER_DESCRIPTION`
-
-Used when the bot asks "Tell me about this in your own words" after a failed enrichment chain. State is stored in a `ConcurrentHashMap<Long, ConversationState>` keyed by `userId`. Auto-clears after 5 minutes.
+```
+/save https://youtu.be/abc123 great food vlog
+         |
+         v
+EnricherServiceImpl --> YOUTUBE
+         |
+         v
+YouTubeEnricher
+  GET /videos?id=abc123&part=snippet
+         |
+         v
+  title + channel + description (trimmed to 1000 chars) + user note
+         |
+         v
+  OpenRouter --> category, summary, tags, isPhysicalLocation
+         |
+         v
+  append channel name to tags
+         |
+         v
+  DiscoveryEntryService.save(source=YOUTUBE)
+```
 
 ---
 
-## Repositories
+## Data Flow for a Google Maps Save
 
-### `repository/UserRepository.java`
-Extends `JpaRepository<User, Long>`. Custom query: `findByTelegramId(Long telegramId)`.
+```
+/save https://maps.app.goo.gl/xyz
+         |
+         v
+EnricherServiceImpl --> GOOGLE_MAPS
+         |
+         v
+GooglePlacesEnricher
+  HttpURLConnection.followRedirect()
+         |
+         v
+  resolved URL contains coords? --> searchNearby (50m radius)
+  resolved URL contains name?   --> searchText
+         |
+         v
+  name + address + rating + types + editorial summary
+         |
+         v
+  OpenRouter --> category, summary, tags, isPhysicalLocation
+         |
+         v
+  DiscoveryEntryService.save(source=GOOGLE_PLACES)
+```
 
-### `repository/GroupRepository.java`
-Extends `JpaRepository<Group, Long>`. Custom query: `findByTelegramGroupId(Long telegramGroupId)`.
+---
 
-### `repository/UserGroupRepository.java`
-Extends `JpaRepository<UserGroup, Long>`. Custom queries:
-- `findByUserAndGroup(User, Group)` — check if membership exists
-- `existsByGroup(Group)` — check if a group has any members yet (used for first-admin logic)
+## Database Schema
 
-### `repository/DiscoveryEntryRepository.java` _(Phase 7)_
-Will support queries scoped by `group_id` for `/query` and `/list`.
+```
+users
+  id | telegram_id (unique) | name | username | created_at
+
+groups
+  id | telegram_group_id (unique) | name | created_at
+
+user_groups
+  id | user_id (FK) | group_id (FK) | role (ADMIN/MEMBER) | joined_at
+
+discovery_entries
+  id | group_id (FK) | added_by (FK) | raw_input | user_note
+   | extracted_data (JSONB) | category | source | tags (TEXT[]) | created_at
+```
+
+---
+
+## Build Phases
+
+| Phase | Status | Description |
+|---|---|---|
+| 1 | done | Telegram bot skeleton |
+| 2 | done | User and Group auto-registration |
+| 3 | done | /save command, enrichment chain skeleton, AI extraction |
+| 4 | done | YouTube and Google Places enrichers |
+| 5 | next | Open Graph enricher (Jsoup) |
+| 6 | - | Conversation state management + timeout |
+| 7 | done | Persist to PostgreSQL with JSONB |
+| 8 | - | /query with two-stage AI reasoning |
+| 9 | - | /list, /delete, /reset + admin controls |
+| 10 | - | Error handling, edge cases, resilience |
+| 11 | - | Deploy to Render + Neon PostgreSQL |
