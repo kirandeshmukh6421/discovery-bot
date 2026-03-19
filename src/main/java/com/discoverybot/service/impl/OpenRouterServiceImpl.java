@@ -21,8 +21,11 @@ public class OpenRouterServiceImpl implements OpenRouterService {
                         Examples: "food", "book", "music", "travel", "fitness",
                         "article", "product", "movie", "podcast" — or anything else
                         that fits. You decide.
-            - summary: 1-2 sentence human friendly description. null if cannot determine.
-            - tags: array of 3-6 lowercase tags. empty array if cannot determine.
+            - summary: 1-2 sentence human friendly description. If a place, business, or
+                        creator name is mentioned, always include it in the summary. null if cannot determine.
+            - tags: array of 4-8 lowercase tags covering the key aspects: what it is, where it is,
+                        who made it, relevant descriptors. Enough to make it easily queryable.
+                        Empty array if cannot determine.
             - isPhysicalLocation: true only if this is a place you can physically visit.
                                   false for everything else.
 
@@ -30,6 +33,9 @@ public class OpenRouterServiceImpl implements OpenRouterService {
             - Extract only what is clearly present in the input. Do not guess or invent.
             - If a field cannot be determined use null (or [] for tags).
             - Always return valid JSON. Nothing else.
+            - Ignore promotional noise: merch links, subscribe reminders, other channel plugs,
+              affiliate links, sponsor segments, or any self-promotion in descriptions.
+              Focus only on what the content is actually about.
 
             Example:
             Input: "Amazing wood fired pizza in Indiranagar, must visit"
