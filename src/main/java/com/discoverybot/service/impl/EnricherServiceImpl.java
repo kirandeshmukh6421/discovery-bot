@@ -3,6 +3,7 @@ package com.discoverybot.service.impl;
 import com.discoverybot.dto.EnrichmentResult;
 import com.discoverybot.service.EnricherService;
 import com.discoverybot.service.enricher.GooglePlacesEnricher;
+import com.discoverybot.service.enricher.OpenGraphEnricher;
 import com.discoverybot.service.enricher.YouTubeEnricher;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -22,11 +23,14 @@ public class EnricherServiceImpl implements EnricherService {
 
     private final YouTubeEnricher youTubeEnricher;
     private final GooglePlacesEnricher googlePlacesEnricher;
+    private final OpenGraphEnricher openGraphEnricher;
 
     public EnricherServiceImpl(YouTubeEnricher youTubeEnricher,
-                               GooglePlacesEnricher googlePlacesEnricher) {
+                               GooglePlacesEnricher googlePlacesEnricher,
+                               OpenGraphEnricher openGraphEnricher) {
         this.youTubeEnricher = youTubeEnricher;
         this.googlePlacesEnricher = googlePlacesEnricher;
+        this.openGraphEnricher = openGraphEnricher;
     }
 
     @Override
@@ -50,9 +54,11 @@ public class EnricherServiceImpl implements EnricherService {
                     });
         }
 
-        // Phase 5: Open Graph enricher — coming next
-        log.info("No specific enricher for {} — falling through to user description", url);
-        return EnrichmentResult.askUser();
+        return openGraphEnricher.enrich(url, userNote)
+                .orElseGet(() -> {
+                    log.info("Open Graph enricher returned empty for {} — asking user for description", url);
+                    return EnrichmentResult.askUser();
+                });
     }
 
     /**
