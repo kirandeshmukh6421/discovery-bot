@@ -2,6 +2,7 @@ package com.discoverybot.service.impl;
 
 import com.discoverybot.dto.EnrichmentResult;
 import com.discoverybot.service.EnricherService;
+import com.discoverybot.service.enricher.YouTubeEnricher;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -10,10 +11,6 @@ import java.util.regex.Pattern;
 
 /**
  * Orchestrates the enrichment chain for a URL.
- *
- * Phase 3: detects link type and logs which enricher would handle it.
- *          All specific enrichers (Phase 4) and Open Graph (Phase 5) are stubs.
- *          Falls through to asking the user for a description.
  */
 @Slf4j
 @Service
@@ -22,15 +19,28 @@ public class EnricherServiceImpl implements EnricherService {
     private static final Pattern URL_PATTERN =
             Pattern.compile("https?://[^\\s]+", Pattern.CASE_INSENSITIVE);
 
+    private final YouTubeEnricher youTubeEnricher;
+
+    public EnricherServiceImpl(YouTubeEnricher youTubeEnricher) {
+        this.youTubeEnricher = youTubeEnricher;
+    }
+
     @Override
     public EnrichmentResult enrich(String url) {
         LinkType linkType = detectLinkType(url);
         log.info("Enrichment requested for {} link: {}", linkType, url);
 
-        // Phase 4: specific enrichers (Google Places, YouTube, Spotify) — stubs, fall through
-        // Phase 5: Open Graph enricher — stub, fall through
-        // Fall through to user description
-        log.debug("All enrichers returned null for {} — requesting user description", url);
+        if (linkType == LinkType.YOUTUBE) {
+            return youTubeEnricher.enrich(url)
+                    .orElseGet(() -> {
+                        log.debug("YouTube enricher returned empty for {} — requesting user description", url);
+                        return EnrichmentResult.askUser();
+                    });
+        }
+
+        // Phase 4: Google Places enricher — coming next
+        // Phase 5: Open Graph enricher — coming next
+        log.debug("No enricher matched for {} — requesting user description", url);
         return EnrichmentResult.askUser();
     }
 
@@ -58,13 +68,10 @@ public class EnricherServiceImpl implements EnricherService {
         if (url.contains("youtube.com") || url.contains("youtu.be")) {
             return LinkType.YOUTUBE;
         }
-        if (url.contains("spotify.com")) {
-            return LinkType.SPOTIFY;
-        }
         return LinkType.GENERIC_URL;
     }
 
     public enum LinkType {
-        GOOGLE_MAPS, YOUTUBE, SPOTIFY, GENERIC_URL
+        GOOGLE_MAPS, YOUTUBE, GENERIC_URL
     }
 }
