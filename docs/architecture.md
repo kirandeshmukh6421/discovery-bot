@@ -114,6 +114,7 @@ getOrCreate  getOrCreate
 | `YouTubeEnricher` | Fetch video/playlist data from YouTube API |
 | `GooglePlacesEnricher` | Resolve Maps links, fetch place data from Places API |
 | `OpenGraphEnricher` | Scrape og:title/description/site_name from generic URLs via Jsoup |
+| `ConversationStateServiceImpl` | Track multi-step user flows (waiting for description) with 5-min auto-timeout |
 | `OpenRouterServiceImpl` | All AI calls — extraction and querying |
 | `DiscoveryEntryServiceImpl` | Persist to PostgreSQL |
 | `UserServiceImpl` | Auto-register users by Telegram ID |
@@ -205,6 +206,41 @@ OpenGraphEnricher
 
 ---
 
+## Conversation State Management (Phase 6)
+
+```
+User starts /save but enricher asks for description
+         |
+         v
+CommandHandler.setState(userId, WAITING_FOR_USER_DESCRIPTION)
+         |
+         v
+ScheduledExecutorService schedules timeout:
+  After 5 minutes, auto-clear state if not completed
+         |
+         v
+Bot replies: "Tell me about this in your own words 👇"
+         |
+   [User has 5 minutes to reply]
+   |
+   v (user sends reply)
+CommandHandler.hasState(userId) == true?
+   |
+   YES v
+   getState(userId) → PendingUserDescription(url, note)
+   Send user's text to OpenRouter
+         |
+         v
+   ExtractionResult → save(source=AI_EXTRACTED)
+   clearState(userId)
+   "✅ Saved! ..."
+
+   NO
+   (State expired) → Ignore message
+```
+
+---
+
 ## Database Schema
 
 ```
@@ -233,7 +269,7 @@ discovery_entries
 | 3 | done | /save command, enrichment chain skeleton, AI extraction |
 | 4 | done | YouTube and Google Places enrichers |
 | 5 | done | Open Graph enricher (Jsoup) |
-| 6 | - | Conversation state management + timeout |
+| 6 | done | Conversation state management + timeout |
 | 7 | done | Persist to PostgreSQL with JSONB |
 | 8 | - | /query with two-stage AI reasoning |
 | 9 | - | /list, /delete, /reset + admin controls |
