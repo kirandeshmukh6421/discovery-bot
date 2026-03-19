@@ -2,11 +2,13 @@ package com.discoverybot.service.impl;
 
 import com.discoverybot.dto.EnrichmentResult;
 import com.discoverybot.dto.ExtractionResult;
+import com.discoverybot.dto.PendingUserDescription;
 import com.discoverybot.model.Group;
 import com.discoverybot.model.Role;
 import com.discoverybot.model.Source;
 import com.discoverybot.model.User;
 import com.discoverybot.service.*;
+import com.discoverybot.state.ConversationState;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -32,6 +34,7 @@ public class CommandHandlerServiceImpl implements CommandHandlerService {
     private final OpenRouterService openRouterService;
     private final DiscoveryEntryService discoveryEntryService;
     private final GroupService groupService;
+    private final ConversationStateService conversationStateService;
 
     @Override
     public String handle(Update update, User user, Group group) {
@@ -56,7 +59,12 @@ public class CommandHandlerServiceImpl implements CommandHandlerService {
             return HELP_TEXT;
         }
 
-        // Not a command — will be used for conversation state replies in Phase 6
+        // Check if user has a pending state (e.g., waiting for description)
+        if (conversationStateService.hasState(user.getTelegramId())) {
+            return handlePendingDescription(text, user, group);
+        }
+
+        // Not a command and no pending state — ignore
         return null;
     }
 
@@ -77,10 +85,14 @@ public class CommandHandlerServiceImpl implements CommandHandlerService {
             String userNote = textBesideUrl.isBlank() ? null : textBesideUrl;
             EnrichmentResult result = enricherService.enrich(url, userNote);
             if (result.needsUserDescription()) {
+                conversationStateService.setState(
+                    user.getTelegramId(),
+                    ConversationState.WAITING_FOR_USER_DESCRIPTION,
+                    new PendingUserDescription(url, userNote, java.time.Instant.now())
+                );
                 if (result.isFailed()) {
                     return "⚠️ " + result.failureReason() + ". Tell me about it in your own words 👇";
                 }
-                // Phase 6 will track state and handle the reply
                 return "Tell me about this in your own words 👇";
             }
             ExtractionResult extraction = result.extractionResult();
@@ -104,6 +116,32 @@ public class CommandHandlerServiceImpl implements CommandHandlerService {
             return "✅ Saved! " + extraction.summary();
         }
         return "✅ Saved!";
+    }
+
+    private String handlePendingDescription(String userDescription, User user, Group group) {
+        PendingUserDescription pending = conversationStateService.getState(user.getTelegramId());
+        if (pending == null) {
+            return null;  // State was cleared (timeout)
+        }
+
+        log.info("Processing user description for user {} on URL: {}", user.getTelegramId(), pending.url());
+
+        // Send user's description to OpenRouter for extraction
+        ExtractionResult extraction = openRouterService.extractDiscovery(userDescription);
+
+        if (extraction == null) {
+            log.warn("OpenRouter extraction failed for user description, saving raw input");
+            // Save raw input even if extraction failed
+            discoveryEntryService.save(user, group, pending.url(), pending.userNote(), null, Source.USER_NOTE);
+            conversationStateService.clearState(user.getTelegramId());
+            return "✅ Saved! (Couldn't extract details, but I saved your input)";
+        }
+
+        // Save with source = AI_EXTRACTED
+        discoveryEntryService.save(user, group, pending.url(), pending.userNote(), extraction, Source.AI_EXTRACTED);
+        conversationStateService.clearState(user.getTelegramId());
+
+        return confirmMessage(extraction);
     }
 
     // ── /query ─────────────────────────────────────────────────────────────────
