@@ -18,9 +18,11 @@ public class OpenRouterServiceImpl implements OpenRouterService {
 
             Fields:
             - category: one or two word lowercase label describing what this is.
-                        Examples: "food", "book", "music", "travel", "fitness",
-                        "article", "product", "movie", "podcast" — or anything else
-                        that fits. You decide.
+                        Be as specific as possible. Examples: "restaurant", "cafe", "temple",
+                        "park", "hotel", "bar", "museum", "beach", "trek", "waterfall",
+                        "book", "music", "article", "movie", "podcast", "product", "fitness",
+                        "video", "playlist" — or anything else that fits. Avoid generic labels
+                        like "place" or "location" — always prefer the specific type.
             - summary: 1-2 sentence human friendly description. If a place, business, or
                         creator name is mentioned, always include it in the summary. null if cannot determine.
             - tags: array of 4-8 lowercase tags covering the key aspects: what it is, where it is,

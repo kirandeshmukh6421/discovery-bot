@@ -28,8 +28,8 @@ public class CommandHandlerServiceImpl implements CommandHandlerService {
             /help — show this message
             """;
 
-    private final OpenRouterService openRouterService;
     private final EnricherService enricherService;
+    private final OpenRouterService openRouterService;
     private final DiscoveryEntryService discoveryEntryService;
     private final GroupService groupService;
 
@@ -74,20 +74,18 @@ public class CommandHandlerServiceImpl implements CommandHandlerService {
         if (url != null) {
             String textBesideUrl = EnricherServiceImpl.textWithoutUrl(input, url);
 
-            if (!textBesideUrl.isBlank()) {
-                // URL + text alongside → send directly to AI
-                return saveWithAi(url + "\n" + textBesideUrl, null, input, user, group);
-            } else {
-                // URL only → enrichment chain (all stubs in Phase 3)
-                EnrichmentResult result = enricherService.enrich(url);
-                if (result.needsUserDescription()) {
-                    // Phase 6 will track state and handle the reply
-                    return "Tell me about this in your own words 👇";
+            String userNote = textBesideUrl.isBlank() ? null : textBesideUrl;
+            EnrichmentResult result = enricherService.enrich(url, userNote);
+            if (result.needsUserDescription()) {
+                if (result.isFailed()) {
+                    return "⚠️ " + result.failureReason() + ". Tell me about it in your own words 👇";
                 }
-                ExtractionResult extraction = result.extractionResult();
-                discoveryEntryService.save(user, group, url, null, extraction, result.source());
-                return confirmMessage(extraction);
+                // Phase 6 will track state and handle the reply
+                return "Tell me about this in your own words 👇";
             }
+            ExtractionResult extraction = result.extractionResult();
+            discoveryEntryService.save(user, group, url, userNote, extraction, result.source());
+            return confirmMessage(extraction);
         } else {
             // Plain text only → send to AI
             return saveWithAi(input, null, input, user, group);
