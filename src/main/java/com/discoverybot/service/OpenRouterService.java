@@ -9,4 +9,10 @@ public interface OpenRouterService {
      * structured extraction data. Returns null if the call fails.
      */
     ExtractionResult extractDiscovery(String content);
+
+    /**
+     * Answers a user query conversationally based on the provided context string
+     * of serialised discovery entries. Returns a plain-text reply.
+     */
+    String answerQuery(String context, String userQuery);
 }
