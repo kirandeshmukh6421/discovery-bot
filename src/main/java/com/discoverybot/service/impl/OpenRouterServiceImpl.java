@@ -10,7 +10,7 @@ import org.springframework.stereotype.Service;
 @Service
 public class OpenRouterServiceImpl implements OpenRouterService {
 
-    private static final String SYSTEM_PROMPT = """
+    private static final String EXTRACTION_SYSTEM_PROMPT = """
             You are a discovery extraction assistant.
 
             Given any content, extract whatever information you can and return
@@ -70,24 +70,49 @@ public class OpenRouterServiceImpl implements OpenRouterService {
             }
             """;
 
+    private static final String QUERY_SYSTEM_PROMPT = """
+            You are a helpful assistant for a group discovery bot.
+            The group has saved the following discoveries (places, books, videos, restaurants, etc.).
+            Answer the user's question naturally and conversationally based on this data.
+            If nothing relevant was found, say so honestly.
+            Do not make up entries that are not in the list.
+            Keep your answer concise and friendly.
+            For every entry you mention in your response, always include the original link or text
+            the user saved (the "Link" field) and their note if one was provided (the "Note" field).
+            """;
+
     private final ChatClient chatClient;
 
     public OpenRouterServiceImpl(ChatClient.Builder chatClientBuilder) {
-        this.chatClient = chatClientBuilder
-                .defaultSystem(SYSTEM_PROMPT)
-                .build();
+        this.chatClient = chatClientBuilder.build();
     }
 
     @Override
     public ExtractionResult extractDiscovery(String content) {
         try {
             return chatClient.prompt()
+                    .system(EXTRACTION_SYSTEM_PROMPT)
                     .user(content)
                     .call()
                     .entity(ExtractionResult.class);
         } catch (Exception e) {
             log.error("OpenRouter extraction failed: {}", e.getMessage());
             return null;
+        }
+    }
+
+    @Override
+    public String answerQuery(String context, String userQuery) {
+        try {
+            String userMessage = "Saved discoveries:\n" + context + "\nQuestion: " + userQuery;
+            return chatClient.prompt()
+                    .system(QUERY_SYSTEM_PROMPT)
+                    .user(userMessage)
+                    .call()
+                    .content();
+        } catch (Exception e) {
+            log.error("OpenRouter query answering failed: {}", e.getMessage());
+            return "Sorry, I couldn't process your query right now.";
         }
     }
 }

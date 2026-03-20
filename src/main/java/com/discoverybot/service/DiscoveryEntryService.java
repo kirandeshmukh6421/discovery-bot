@@ -13,5 +13,9 @@ public interface DiscoveryEntryService {
     DiscoveryEntry save(User user, Group group, String rawInput, String userNote,
                         ExtractionResult extraction, Source source);
 
-    List<DiscoveryEntry> findRecent(Group group, int limit);
+    /** Returns the 30 most recently saved entries for the group. */
+    List<DiscoveryEntry> findRecent(Group group);
+
+    /** Persists a pre-computed embedding vector for the given entry. */
+    void updateEmbedding(Long entryId, float[] vector);
 }

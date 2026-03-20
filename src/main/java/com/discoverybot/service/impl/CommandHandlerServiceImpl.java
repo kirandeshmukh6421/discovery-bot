@@ -35,6 +35,7 @@ public class CommandHandlerServiceImpl implements CommandHandlerService {
     private final DiscoveryEntryService discoveryEntryService;
     private final GroupService groupService;
     private final ConversationStateService conversationStateService;
+    private final QueryService queryService;
 
     @Override
     public String handle(Update update, User user, Group group) {
@@ -44,7 +45,7 @@ public class CommandHandlerServiceImpl implements CommandHandlerService {
             return handleSave(text, user, group);
         }
         if (text.startsWith("/query")) {
-            return handleQuery(text);
+            return handleQuery(text, group);
         }
         if (text.startsWith("/list")) {
             return "📋 /list coming in Phase 9.";
@@ -146,12 +147,12 @@ public class CommandHandlerServiceImpl implements CommandHandlerService {
 
     // ── /query ─────────────────────────────────────────────────────────────────
 
-    private String handleQuery(String text) {
+    private String handleQuery(String text, Group group) {
         String query = removeCommand(text, "/query").trim();
         if (query.isBlank()) {
             return "Usage: /query <question>\nExample: /query any good ramen spots?";
         }
-        return "🔍 /query coming in Phase 8.";
+        return queryService.query(group, query);
     }
 
     // ── admin commands ─────────────────────────────────────────────────────────
