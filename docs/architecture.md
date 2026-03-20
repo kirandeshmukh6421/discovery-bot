@@ -46,7 +46,7 @@ YouTubeEnricher  GooglePlaces  OpenGraph
     |   v                        |
     | searchText <---------------+
     |
-    v (both enrichers)
+    v (all enrichers)
 OpenRouterService.extractDiscovery(apiData + userNote?)
          |
          v
@@ -57,7 +57,13 @@ OpenRouterService.extractDiscovery(apiData + userNote?)
   DiscoveryEntryService.save()
          |
          v
-  "Saved! <summary>"
+  EmbeddingService.embed(category | tags | summary)
+         |
+         v
+  Store embedding vector(1536) in DB
+         |
+         v
+  "✅ Saved! <summary>"
 
 On enricher failure (YouTube/Maps):
   "Could not fetch details. Tell me about it in your own words"
@@ -67,19 +73,38 @@ On Open Graph unusable (login wall / blank):
 
 ---
 
-## Query Flow (Phase 8)
+## Query Flow
 
 ```
 User: /query <natural language>
          |
          v
-Stage 1: AI extracts filters (category, tags, location, date range)
+EmbeddingService.embed(userQuery)
+         |
+   success?
+    yes  |  no
+    |    v
+    |  findRecent(group, 30)  <-- fallback
+    |
+    v
+DiscoveryEntryRepository.findSimilar(groupId, queryVector, 15)
+  ORDER BY embedding <=> queryVector  (cosine similarity)
+         |
+  0 results? --> fallback to findRecent(group, 30)
          |
          v
-Stage 2: Java builds parameterized SQL scoped to group_id
+  Serialize top entries into context string:
+  [1] Category: restaurant | Source: OPEN_GRAPH | Tags: pizza, bangalore
+      Summary: Eleven Bakehouse serves NY-style pizza in Indiranagar
+      Link: https://... | Note: "try the margherita" | Saved: 2026-03-20
          |
          v
-Stage 3: AI reasons over result set, replies conversationally
+OpenRouterService.answerQuery(context, userQuery)
+  system: conversational assistant prompt
+  user:   context + question
+         |
+         v
+  Plain text reply (with links + notes for every entry mentioned)
 ```
 
 ---
@@ -115,8 +140,10 @@ getOrCreate  getOrCreate
 | `GooglePlacesEnricher` | Resolve Maps links, fetch place data from Places API |
 | `OpenGraphEnricher` | Scrape og:title/description/site_name from generic URLs via Jsoup |
 | `ConversationStateServiceImpl` | Track multi-step user flows (waiting for description) with 5-min auto-timeout |
-| `OpenRouterServiceImpl` | All AI calls — extraction and querying |
-| `DiscoveryEntryServiceImpl` | Persist to PostgreSQL |
+| `OpenRouterServiceImpl` | All AI calls — extraction (JSON) and query answering (conversational) |
+| `EmbeddingServiceImpl` | Generate 1536-dim embeddings via OpenRouter `/v1/embeddings` |
+| `QueryServiceImpl` | Vector search → serialize context → AI answer |
+| `DiscoveryEntryServiceImpl` | Persist to PostgreSQL, store embeddings after save |
 | `UserServiceImpl` | Auto-register users by Telegram ID |
 | `GroupServiceImpl` | Auto-register groups, manage roles |
 
@@ -145,6 +172,9 @@ YouTubeEnricher
          |
          v
   DiscoveryEntryService.save(source=YOUTUBE)
+         |
+         v
+  EmbeddingService.embed() --> store vector(1536)
 ```
 
 ---
@@ -173,6 +203,9 @@ GooglePlacesEnricher
          |
          v
   DiscoveryEntryService.save(source=GOOGLE_PLACES)
+         |
+         v
+  EmbeddingService.embed() --> store vector(1536)
 ```
 
 ---
@@ -202,6 +235,9 @@ OpenGraphEnricher
          |
          v
   DiscoveryEntryService.save(source=OPEN_GRAPH)
+         |
+         v
+  EmbeddingService.embed() --> store vector(1536)
 ```
 
 ---
@@ -255,7 +291,12 @@ user_groups
 
 discovery_entries
   id | group_id (FK) | added_by (FK) | raw_input | user_note
-   | extracted_data (JSONB) | category | source | tags (TEXT[]) | created_at
+   | extracted_data (JSONB) | category | source | tags | created_at
+   | embedding vector(1536)   <-- cosine similarity search (Phase 8)
+
+Schema managed by Flyway:
+  V1__init.sql  — baseline tables
+  V2__pgvector.sql — CREATE EXTENSION vector, ADD COLUMN embedding, HNSW index
 ```
 
 ---
@@ -264,14 +305,14 @@ discovery_entries
 
 | Phase | Status | Description |
 |---|---|---|
-| 1 | done | Telegram bot skeleton |
-| 2 | done | User and Group auto-registration |
-| 3 | done | /save command, enrichment chain skeleton, AI extraction |
-| 4 | done | YouTube and Google Places enrichers |
-| 5 | done | Open Graph enricher (Jsoup) |
-| 6 | done | Conversation state management + timeout |
-| 7 | done | Persist to PostgreSQL with JSONB |
-| 8 | - | /query with two-stage AI reasoning |
-| 9 | - | /list, /delete, /reset + admin controls |
-| 10 | - | Error handling, edge cases, resilience |
-| 11 | - | Deploy to Render + Neon PostgreSQL |
+| 1 | ✅ | Telegram bot skeleton |
+| 2 | ✅ | User and Group auto-registration |
+| 3 | ✅ | /save command, enrichment chain skeleton, AI extraction |
+| 4 | ✅ | YouTube and Google Places enrichers |
+| 5 | ✅ | Open Graph enricher (Jsoup) |
+| 6 | ✅ | Conversation state management + 5-min timeout |
+| 7 | ✅ | Persist to PostgreSQL with JSONB |
+| 8 | ✅ | /query with pgvector semantic search + conversational AI answer |
+| 9 | — | /list, /delete, /reset + admin controls |
+| 10 | — | Error handling, edge cases, resilience |
+| 11 | — | Deploy to Render + Neon PostgreSQL |
