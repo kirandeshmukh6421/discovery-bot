@@ -28,5 +28,25 @@
     "name": "spring.ai.openai.embedding.enabled",
     "type": "java.lang.String",
     "description": "A description for 'spring.ai.openai.embedding.enabled'"
+  },
+  {
+    "name": "google.places.api.key",
+    "type": "java.lang.String",
+    "description": "A description for 'google.places.api.key'"
+  },
+  {
+    "name": "youtube.api.key",
+    "type": "java.lang.String",
+    "description": "A description for 'youtube.api.key'"
+  },
+  {
+    "name": "openrouter.base-url",
+    "type": "java.lang.String",
+    "description": "A description for 'openrouter.base-url'"
+  },
+  {
+    "name": "openrouter.embedding.model",
+    "type": "java.lang.String",
+    "description": "A description for 'openrouter.embedding.model'"
   }
 ]}
