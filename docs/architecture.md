@@ -277,6 +277,50 @@ CommandHandler.hasState(userId) == true?
 
 ---
 
+## Admin Commands (Phase 9)
+
+```
+/list
+         |
+         v
+DiscoveryEntryService.listRecent(group)   <-- top 10 by created_at DESC
+         |
+         v
+Format: bold summary + category + id per entry
+         |
+         v
+"📋 Recent discoveries\n*<summary>*\n🏷 <category> • 🆔 <id>\n..."
+
+/delete <id>
+         |
+    isAdmin?  no --> "⛔ You don't have permission"
+         |
+        yes
+         |
+    parse id (invalid/missing --> "Usage: /delete <id>")
+         |
+         v
+DiscoveryEntryRepository.deleteByIdAndGroup(id, group)
+  scoped to group — prevents cross-group deletes
+         |
+  found? yes --> "✅ Deleted."
+         no  --> "❌ Entry not found."
+
+/reset
+         |
+    isAdmin?  no --> "⛔ You don't have permission"
+         |
+        yes
+         |
+         v
+DiscoveryEntryRepository.deleteAllByGroup(group)
+         |
+         v
+"✅ All discoveries cleared."
+```
+
+---
+
 ## Database Schema
 
 ```
@@ -313,6 +357,6 @@ Schema managed by Flyway:
 | 6 | ✅ | Conversation state management + 5-min timeout |
 | 7 | ✅ | Persist to PostgreSQL with JSONB |
 | 8 | ✅ | /query with pgvector semantic search + conversational AI answer |
-| 9 | — | /list, /delete, /reset + admin controls |
+| 9 | ✅ | /list, /delete, /reset + admin controls |
 | 10 | — | Error handling, edge cases, resilience |
 | 11 | — | Deploy to Render + Neon PostgreSQL |

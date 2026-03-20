@@ -29,4 +29,12 @@ public interface DiscoveryEntryRepository extends JpaRepository<DiscoveryEntry, 
     List<DiscoveryEntry> findSimilar(@Param("groupId") Long groupId,
                                      @Param("embedding") String embedding,
                                      @Param("limit") int limit);
+
+    @Modifying
+    @Query("DELETE FROM DiscoveryEntry e WHERE e.id = :id AND e.group = :group")
+    int deleteByIdAndGroup(@Param("id") Long id, @Param("group") Group group);
+
+    @Modifying
+    @Query("DELETE FROM DiscoveryEntry e WHERE e.group = :group")
+    void deleteAllByGroup(@Param("group") Group group);
 }
