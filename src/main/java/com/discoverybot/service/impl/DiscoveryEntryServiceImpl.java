@@ -71,6 +71,24 @@ public class DiscoveryEntryServiceImpl implements DiscoveryEntryService {
     }
 
     @Override
+    public List<DiscoveryEntry> listRecent(Group group) {
+        return repository.findByGroupOrderByCreatedAtDesc(group, PageRequest.of(0, 10));
+    }
+
+    @Override
+    @Transactional
+    public boolean delete(Long entryId, Group group) {
+        int deleted = repository.deleteByIdAndGroup(entryId, group);
+        return deleted > 0;
+    }
+
+    @Override
+    @Transactional
+    public void reset(Group group) {
+        repository.deleteAllByGroup(group);
+    }
+
+    @Override
     @Transactional
     public void updateEmbedding(Long entryId, float[] vector) {
         try {

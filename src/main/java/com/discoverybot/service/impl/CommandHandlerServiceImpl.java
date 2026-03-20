@@ -3,12 +3,15 @@ package com.discoverybot.service.impl;
 import com.discoverybot.dto.EnrichmentResult;
 import com.discoverybot.dto.ExtractionResult;
 import com.discoverybot.dto.PendingUserDescription;
+import com.discoverybot.model.DiscoveryEntry;
 import com.discoverybot.model.Group;
 import com.discoverybot.model.Role;
 import com.discoverybot.model.Source;
 import com.discoverybot.model.User;
 import com.discoverybot.service.*;
 import com.discoverybot.state.ConversationState;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -36,6 +39,7 @@ public class CommandHandlerServiceImpl implements CommandHandlerService {
     private final GroupService groupService;
     private final ConversationStateService conversationStateService;
     private final QueryService queryService;
+    private final ObjectMapper objectMapper;
 
     @Override
     public String handle(Update update, User user, Group group) {
@@ -48,7 +52,7 @@ public class CommandHandlerServiceImpl implements CommandHandlerService {
             return handleQuery(text, group);
         }
         if (text.startsWith("/list")) {
-            return "📋 /list coming in Phase 9.";
+            return handleList(group);
         }
         if (text.startsWith("/delete")) {
             return handleDelete(text, user, group);
@@ -157,18 +161,58 @@ public class CommandHandlerServiceImpl implements CommandHandlerService {
 
     // ── admin commands ─────────────────────────────────────────────────────────
 
+    private String handleList(Group group) {
+        var entries = discoveryEntryService.listRecent(group);
+        if (entries.isEmpty()) {
+            return "No discoveries saved yet.";
+        }
+        StringBuilder sb = new StringBuilder("📋 *Recent discoveries*\n\n");
+        for (var entry : entries) {
+            String summary = entry.getExtractedData() != null ? extractSummary(entry) : entry.getRawInput();
+            String category = entry.getCategory() != null ? entry.getCategory() : "misc";
+            sb.append("*").append(summary).append("*").append("\n");
+            sb.append("🏷 ").append(category).append("  •  🆔 ").append(entry.getId()).append("\n\n");
+        }
+        return sb.toString().trim();
+    }
+
     private String handleDelete(String text, User user, Group group) {
         if (!isAdmin(user, group)) {
             return "⛔ You don't have permission to delete entries.";
         }
-        return "🗑️ /delete coming in Phase 9.";
+        String idStr = removeCommand(text, "/delete").trim();
+        if (idStr.isBlank()) {
+            return "Usage: /delete <id>";
+        }
+        long id;
+        try {
+            id = Long.parseLong(idStr);
+        } catch (NumberFormatException e) {
+            return "Usage: /delete <id>";
+        }
+        boolean deleted = discoveryEntryService.delete(id, group);
+        return deleted ? "✅ Deleted." : "❌ Entry not found.";
     }
 
     private String handleReset(User user, Group group) {
         if (!isAdmin(user, group)) {
             return "⛔ You don't have permission to reset group data.";
         }
-        return "⚠️ /reset coming in Phase 9.";
+        discoveryEntryService.reset(group);
+        return "✅ All discoveries cleared.";
+    }
+
+    private String extractSummary(DiscoveryEntry entry) {
+        try {
+            JsonNode node = objectMapper.readTree(entry.getExtractedData());
+            JsonNode summaryNode = node.get("summary");
+            if (summaryNode != null && !summaryNode.isNull()) {
+                return summaryNode.asText();
+            }
+        } catch (Exception e) {
+            log.debug("Could not parse extractedData for entry {}", entry.getId());
+        }
+        return entry.getRawInput();
     }
 
     // ── helpers ────────────────────────────────────────────────────────────────
