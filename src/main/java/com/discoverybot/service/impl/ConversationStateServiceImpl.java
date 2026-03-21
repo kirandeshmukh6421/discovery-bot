@@ -11,21 +11,14 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
-/**
- * Manages conversation state for users waiting for replies.
- * Uses ConcurrentHashMap for thread-safe access (Telegram processes messages concurrently).
- * Uses ScheduledExecutorService to auto-clear expired states after 5 minutes.
- */
 @Slf4j
 @Service
 public class ConversationStateServiceImpl implements ConversationStateService {
 
     private static final long TIMEOUT_MINUTES = 5;
 
-    // Thread-safe map: userId → pending state
     private final Map<Long, PendingUserDescription> states = new ConcurrentHashMap<>();
 
-    // Scheduler to auto-clear states after timeout
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
 
     @Override
@@ -33,7 +26,6 @@ public class ConversationStateServiceImpl implements ConversationStateService {
         states.put(userId, pending);
         log.info("User {} is now waiting for description", userId);
 
-        // Schedule auto-cleanup after 5 minutes
         scheduler.schedule(() -> {
             if (states.containsKey(userId)) {
                 states.remove(userId);

@@ -45,7 +45,6 @@ public class QueryServiceImpl implements QueryService {
     }
 
     private List<DiscoveryEntry> retrieveEntries(Group group, String userQuery) {
-        // Try vector search first
         float[] queryVector = embeddingService.embed(userQuery);
         if (queryVector != null) {
             List<DiscoveryEntry> similar = discoveryEntryRepository.findSimilar(

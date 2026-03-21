@@ -14,14 +14,6 @@ import org.telegram.telegrambots.meta.api.objects.Update;
 
 import java.util.Map;
 
-/**
- * Core bot class. Receives Telegram updates via webhook and dispatches them.
- *
- * Responsibilities:
- * - Auto-register user and group on every message
- * - Route all text to CommandHandlerService
- * - Send replies back to Telegram via REST API
- */
 @Slf4j
 @Component
 public class DiscoveryBot {
@@ -55,7 +47,6 @@ public class DiscoveryBot {
         var telegramUser = message.getFrom();
         var telegramChat = message.getChat();
 
-        // telegramUser is null for anonymous channel posts — skip them
         if (telegramUser == null || telegramChat == null) {
             return;
         }

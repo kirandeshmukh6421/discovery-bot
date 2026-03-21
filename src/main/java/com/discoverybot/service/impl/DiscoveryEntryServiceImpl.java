@@ -53,7 +53,6 @@ public class DiscoveryEntryServiceImpl implements DiscoveryEntryService {
         DiscoveryEntry saved = repository.save(entry);
         log.info("Saved discovery entry {} for group {} by {}", saved.getId(), group.getName(), user.getName());
 
-        // Generate and store embedding asynchronously (best-effort)
         if (extraction != null) {
             String embeddingInput = buildEmbeddingInput(extraction, rawInput);
             float[] vector = embeddingService.embed(embeddingInput);

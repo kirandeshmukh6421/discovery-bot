@@ -34,7 +34,6 @@ public class DiscoveryEntry {
     @Column(name = "user_note", columnDefinition = "TEXT")
     private String userNote;
 
-    /** JSON-serialised extraction result — stored as jsonb in PostgreSQL. */
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "extracted_data", columnDefinition = "jsonb")
     private String extractedData;
@@ -46,7 +45,6 @@ public class DiscoveryEntry {
     @Column(name = "source")
     private Source source;
 
-    /** Comma-separated tags — migrated to text[] in Phase 7. */
     @Column(name = "tags")
     private String tags;
 

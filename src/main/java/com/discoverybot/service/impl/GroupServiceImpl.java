@@ -15,13 +15,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.telegram.telegrambots.meta.api.objects.Chat;
 
-/**
- * Handles group identity resolution and user-group membership.
- *
- * Groups are auto-registered the first time the bot receives a message in them.
- * Membership (user_groups) is created on first contact per user per group.
- * The first person to message in a group receives ADMIN role; everyone else gets MEMBER.
- */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -31,16 +24,8 @@ public class GroupServiceImpl implements GroupService {
     GroupRepository groupRepository;
     UserGroupRepository userGroupRepository;
 
-    /**
-     * Returns the existing group for the given Telegram chat, or creates one if first contact.
-     * Works for both group chats and private DM chats (Telegram gives each a unique chat ID).
-     *
-     * @param telegramChat The Telegram Chat object from the incoming update
-     * @return Persisted Group entity
-     */
     @Override
     public Group getOrCreate(Chat telegramChat) {
-        // Lookup by Telegram's numeric chat ID (negative for groups, positive for DMs)
         return groupRepository.findByTelegramGroupId(telegramChat.getId())
                 .orElseGet(() -> {
                     Group group = new Group(telegramChat.getId(), telegramChat.getTitle());
@@ -50,25 +35,12 @@ public class GroupServiceImpl implements GroupService {
                 });
     }
 
-    /**
-     * Ensures a user-group membership record exists for the given user and group.
-     * Safe to call on every message — exits early if membership already exists.
-     *
-     * Role assignment:
-     * - First person to message in a group → ADMIN
-     * - All subsequent users → MEMBER
-     *
-     * @param user  The resolved User entity
-     * @param group The resolved Group entity
-     */
     @Override
     public void registerUserInGroup(User user, Group group) {
-        // Already a member — nothing to do
         if (userGroupRepository.findByUserAndGroup(user, group).isPresent()) {
             return;
         }
 
-        // If no members exist yet for this group, this user is the first — make them ADMIN
         boolean isFirstMember = !userGroupRepository.existsByGroup(group);
         Role role = isFirstMember ? Role.ADMIN : Role.MEMBER;
 
@@ -77,14 +49,6 @@ public class GroupServiceImpl implements GroupService {
         log.info("Registered user {} in group {} as {}", user.getName(), group.getName(), role);
     }
 
-    /**
-     * Returns the role of a user in a specific group.
-     * Falls back to MEMBER if no membership record is found (defensive default).
-     *
-     * @param user  The resolved User entity
-     * @param group The resolved Group entity
-     * @return ADMIN or MEMBER
-     */
     @Override
     public Role getUserRole(User user, Group group) {
         return userGroupRepository.findByUserAndGroup(user, group)

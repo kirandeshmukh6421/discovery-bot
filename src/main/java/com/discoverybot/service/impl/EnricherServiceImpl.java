@@ -11,9 +11,6 @@ import org.springframework.stereotype.Service;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/**
- * Orchestrates the enrichment chain for a URL.
- */
 @Slf4j
 @Service
 public class EnricherServiceImpl implements EnricherService {
@@ -61,18 +58,12 @@ public class EnricherServiceImpl implements EnricherService {
                 });
     }
 
-    /**
-     * Extracts the first URL from an arbitrary string, or returns null.
-     */
     public static String extractUrl(String text) {
         if (text == null) return null;
         Matcher m = URL_PATTERN.matcher(text);
         return m.find() ? m.group() : null;
     }
 
-    /**
-     * Returns the text from {@code input} with the given {@code url} removed and trimmed.
-     */
     public static String textWithoutUrl(String input, String url) {
         return input.replace(url, "").trim();
     }

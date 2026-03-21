@@ -73,20 +73,13 @@ public class GooglePlacesEnricher {
         }
     }
 
-    /**
-     * Routes to the correct Places API call based on what the resolved URL contains.
-     * - Coordinates (pin drop) → searchNearby
-     * - Place name → searchText
-     */
     private PlacesResult findPlace(String resolvedUrl) {
-        // Check for coordinates in q= param first
         double[] coords = extractCoordinates(resolvedUrl);
         if (coords != null) {
             log.info("Detected pin drop coordinates: {}, {} — using nearby search", coords[0], coords[1]);
             return nearbySearch(coords[0], coords[1]);
         }
 
-        // Fall back to place name text search
         String placeName = extractPlaceName(resolvedUrl);
         if (placeName == null) {
             log.warn("Could not extract place name or coordinates from URL: {}", resolvedUrl);
@@ -154,9 +147,6 @@ public class GooglePlacesEnricher {
         return sb.toString();
     }
 
-    /**
-     * Returns [lat, lng] if q= param contains coordinates, null otherwise.
-     */
     private double[] extractCoordinates(String url) {
         try {
             String query = URI.create(url).getQuery();
@@ -179,10 +169,6 @@ public class GooglePlacesEnricher {
         return null;
     }
 
-    /**
-     * Extracts a searchable place name from a resolved Google Maps URL.
-     * Handles /maps/place/{Name}/ path and ?q= query param with address strings.
-     */
     private String extractPlaceName(String url) {
         try {
             URI uri = URI.create(url);
@@ -201,7 +187,6 @@ public class GooglePlacesEnricher {
                 for (String param : query.split("&")) {
                     if (param.startsWith("q=")) {
                         String full = URLDecoder.decode(param.substring(2), StandardCharsets.UTF_8);
-                        // Full address like "Place Name, Area, Street, City..." — keep only name + area
                         String[] parts = full.split(",");
                         return parts.length >= 2
                                 ? parts[0].trim() + ", " + parts[1].trim()
@@ -215,10 +200,6 @@ public class GooglePlacesEnricher {
         return null;
     }
 
-    /**
-     * Follows HTTP redirects to get the final URL.
-     * Uses GET + reads the stream to ensure redirects are fully followed.
-     */
     private String resolveUrl(String url) {
         try {
             HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();

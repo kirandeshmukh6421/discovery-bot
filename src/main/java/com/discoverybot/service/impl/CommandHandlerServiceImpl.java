@@ -63,16 +63,12 @@ public class CommandHandlerServiceImpl implements CommandHandlerService {
             return HELP_TEXT;
         }
 
-        // Check if user swiped-replied to the bot's description prompt
         if (isReplyToBot(update) && conversationStateService.hasState(user.getTelegramId())) {
             return handlePendingDescription(text, user, group);
         }
 
-        // Not a command and no pending state — ignore
         return null;
     }
-
-    // ── /save ──────────────────────────────────────────────────────────────────
 
     private String handleSave(String text, User user, Group group) {
         String input = removeCommand(text, "/save").trim();
@@ -102,7 +98,6 @@ public class CommandHandlerServiceImpl implements CommandHandlerService {
             discoveryEntryService.save(user, group, url, userNote, extraction, result.source());
             return confirmMessage(extraction);
         } else {
-            // Plain text only → send to AI
             return saveWithAi(input, null, input, user, group);
         }
     }
@@ -124,30 +119,25 @@ public class CommandHandlerServiceImpl implements CommandHandlerService {
     private String handlePendingDescription(String userDescription, User user, Group group) {
         PendingUserDescription pending = conversationStateService.getState(user.getTelegramId());
         if (pending == null) {
-            return null;  // State was cleared (timeout)
+            return null;
         }
 
         log.info("Processing user description for user {} on URL: {}", user.getTelegramId(), pending.url());
 
-        // Send user's description to OpenRouter for extraction
         ExtractionResult extraction = openRouterService.extractDiscovery(userDescription);
 
         if (extraction == null) {
             log.warn("OpenRouter extraction failed for user description, saving raw input");
-            // Save raw input even if extraction failed
             discoveryEntryService.save(user, group, pending.url(), pending.userNote(), null, Source.USER_NOTE);
             conversationStateService.clearState(user.getTelegramId());
             return "✅ Saved! (Couldn't extract details, but I saved your input)";
         }
 
-        // Save with source = AI_EXTRACTED
         discoveryEntryService.save(user, group, pending.url(), pending.userNote(), extraction, Source.AI_EXTRACTED);
         conversationStateService.clearState(user.getTelegramId());
 
         return confirmMessage(extraction);
     }
-
-    // ── /query ─────────────────────────────────────────────────────────────────
 
     private String handleQuery(String text, Group group) {
         String query = removeCommand(text, "/query").trim();
@@ -156,8 +146,6 @@ public class CommandHandlerServiceImpl implements CommandHandlerService {
         }
         return queryService.query(group, query);
     }
-
-    // ── admin commands ─────────────────────────────────────────────────────────
 
     private String handleList(Group group) {
         var entries = discoveryEntryService.listRecent(group);
@@ -213,8 +201,6 @@ public class CommandHandlerServiceImpl implements CommandHandlerService {
         return entry.getRawInput();
     }
 
-    // ── helpers ────────────────────────────────────────────────────────────────
-
     private boolean isReplyToBot(Update update) {
         var replyTo = update.getMessage().getReplyToMessage();
         return replyTo != null && replyTo.getFrom() != null && replyTo.getFrom().getIsBot();
@@ -231,10 +217,6 @@ public class CommandHandlerServiceImpl implements CommandHandlerService {
         return text;
     }
 
-    /**
-     * Strips the @botname suffix from commands sent in groups.
-     * e.g. "/save@DiscoveryBot hello" → "/save hello"
-     */
     private String stripBotMention(String text) {
         return text.replaceFirst("^(/\\w+)@\\w+", "$1");
     }

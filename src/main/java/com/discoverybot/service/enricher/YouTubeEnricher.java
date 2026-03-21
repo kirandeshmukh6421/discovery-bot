@@ -192,12 +192,6 @@ public class YouTubeEnricher {
         return null;
     }
 
-    /**
-     * Extracts the video ID from:
-     * - youtube.com/watch?v=VIDEO_ID (with or without extra params)
-     * - youtube.com/shorts/VIDEO_ID
-     * - youtu.be/VIDEO_ID
-     */
     private String extractVideoId(String url) {
         try {
             URI uri = URI.create(url);
