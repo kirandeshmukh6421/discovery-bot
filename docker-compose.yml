@@ -19,5 +19,18 @@ services:
       timeout: 5s
       retries: 5
 
+  app:
+    build: .
+    container_name: discovery-bot-app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/discovery_bot
+
 volumes:
   postgres_data:
