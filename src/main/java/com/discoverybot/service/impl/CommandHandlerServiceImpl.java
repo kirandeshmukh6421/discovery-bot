@@ -9,7 +9,6 @@ import com.discoverybot.model.Role;
 import com.discoverybot.model.Source;
 import com.discoverybot.model.User;
 import com.discoverybot.service.*;
-import com.discoverybot.state.ConversationState;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -43,7 +42,7 @@ public class CommandHandlerServiceImpl implements CommandHandlerService {
 
     @Override
     public String handle(Update update, User user, Group group) {
-        String text = update.getMessage().getText().trim();
+        String text = stripBotMention(update.getMessage().getText().trim());
 
         if (text.startsWith("/save")) {
             return handleSave(text, user, group);
@@ -64,8 +63,8 @@ public class CommandHandlerServiceImpl implements CommandHandlerService {
             return HELP_TEXT;
         }
 
-        // Check if user has a pending state (e.g., waiting for description)
-        if (conversationStateService.hasState(user.getTelegramId())) {
+        // Check if user swiped-replied to the bot's description prompt
+        if (isReplyToBot(update) && conversationStateService.hasState(user.getTelegramId())) {
             return handlePendingDescription(text, user, group);
         }
 
@@ -92,13 +91,12 @@ public class CommandHandlerServiceImpl implements CommandHandlerService {
             if (result.needsUserDescription()) {
                 conversationStateService.setState(
                     user.getTelegramId(),
-                    ConversationState.WAITING_FOR_USER_DESCRIPTION,
                     new PendingUserDescription(url, userNote, java.time.Instant.now())
                 );
                 if (result.isFailed()) {
-                    return "⚠️ " + result.failureReason() + ". Tell me about it in your own words 👇";
+                    return "⚠️ " + result.failureReason() + ". ↩️ Reply to this message and describe it in your own words 👇";
                 }
-                return "Tell me about this in your own words 👇";
+                return "↩️ Reply to this message and describe it in your own words 👇";
             }
             ExtractionResult extraction = result.extractionResult();
             discoveryEntryService.save(user, group, url, userNote, extraction, result.source());
@@ -217,6 +215,11 @@ public class CommandHandlerServiceImpl implements CommandHandlerService {
 
     // ── helpers ────────────────────────────────────────────────────────────────
 
+    private boolean isReplyToBot(Update update) {
+        var replyTo = update.getMessage().getReplyToMessage();
+        return replyTo != null && replyTo.getFrom() != null && replyTo.getFrom().getIsBot();
+    }
+
     private boolean isAdmin(User user, Group group) {
         return groupService.getUserRole(user, group) == Role.ADMIN;
     }
@@ -226,5 +229,13 @@ public class CommandHandlerServiceImpl implements CommandHandlerService {
             return text.substring(command.length());
         }
         return text;
+    }
+
+    /**
+     * Strips the @botname suffix from commands sent in groups.
+     * e.g. "/save@DiscoveryBot hello" → "/save hello"
+     */
+    private String stripBotMention(String text) {
+        return text.replaceFirst("^(/\\w+)@\\w+", "$1");
     }
 }
