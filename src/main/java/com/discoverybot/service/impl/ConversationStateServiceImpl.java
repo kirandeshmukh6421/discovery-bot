@@ -2,7 +2,6 @@ package com.discoverybot.service.impl;
 
 import com.discoverybot.dto.PendingUserDescription;
 import com.discoverybot.service.ConversationStateService;
-import com.discoverybot.state.ConversationState;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -30,9 +29,9 @@ public class ConversationStateServiceImpl implements ConversationStateService {
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
 
     @Override
-    public void setState(Long userId, ConversationState state, PendingUserDescription pending) {
+    public void setState(Long userId, PendingUserDescription pending) {
         states.put(userId, pending);
-        log.info("User {} is waiting for description (state: {})", userId, state);
+        log.info("User {} is now waiting for description", userId);
 
         // Schedule auto-cleanup after 5 minutes
         scheduler.schedule(() -> {

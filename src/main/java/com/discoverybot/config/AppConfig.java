@@ -2,6 +2,7 @@ package com.discoverybot.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.web.reactive.function.client.WebClient;
 
 /**
@@ -14,6 +15,7 @@ import org.springframework.web.reactive.function.client.WebClient;
  * Per Spring's recommendation, inject WebClient.Builder (not WebClient directly)
  * so each consumer can apply its own base URL, headers, or filters.
  */
+@EnableAsync
 @Configuration
 public class AppConfig {
 

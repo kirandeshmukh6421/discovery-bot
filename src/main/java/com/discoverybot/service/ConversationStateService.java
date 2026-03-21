@@ -1,7 +1,6 @@
 package com.discoverybot.service;
 
 import com.discoverybot.dto.PendingUserDescription;
-import com.discoverybot.state.ConversationState;
 
 /**
  * Manages conversation state for users in the middle of multi-step flows.
@@ -10,10 +9,10 @@ import com.discoverybot.state.ConversationState;
 public interface ConversationStateService {
 
     /**
-     * Store a pending state for a user (e.g., waiting for description).
+     * Store a pending description for a user.
      * Automatically schedules a 5-minute timeout to clear the state if not completed.
      */
-    void setState(Long userId, ConversationState state, PendingUserDescription pending);
+    void setState(Long userId, PendingUserDescription pending);
 
     /**
      * Get the pending state for a user, or null if they have no pending state.
