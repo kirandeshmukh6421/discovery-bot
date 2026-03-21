@@ -133,7 +133,9 @@ getOrCreate  getOrCreate
 
 | Component | Responsibility |
 |---|---|
-| `DiscoveryBot` | Receive Telegram updates, route to handlers |
+| `TelegramWebhookController` | Receive POST /telegram from Telegram, hand off to DiscoveryBot async |
+| `PingController` | GET /ping health check |
+| `DiscoveryBot` | Process updates @Async, send replies via Telegram REST API |
 | `CommandHandlerServiceImpl` | Parse commands, orchestrate save/query flow |
 | `EnricherServiceImpl` | Detect link type, route to correct enricher |
 | `YouTubeEnricher` | Fetch video/playlist data from YouTube API |
@@ -242,25 +244,27 @@ OpenGraphEnricher
 
 ---
 
-## Conversation State Management (Phase 6)
+## Conversation State Management
 
 ```
 User starts /save but enricher asks for description
          |
          v
-CommandHandler.setState(userId, WAITING_FOR_USER_DESCRIPTION)
+CommandHandler.setState(userId, PendingUserDescription(url, note))
          |
          v
 ScheduledExecutorService schedules timeout:
   After 5 minutes, auto-clear state if not completed
          |
          v
-Bot replies: "Tell me about this in your own words 👇"
+Bot replies: "↩️ Reply to this message and describe it in your own words 👇"
          |
-   [User has 5 minutes to reply]
+   [User has 5 minutes to reply to the bot's message]
    |
-   v (user sends reply)
-CommandHandler.hasState(userId) == true?
+   v (user replies to bot message)
+isReplyToBot(update)?  →  replyToMessage.getFrom().getIsBot() == true
+   |
+   AND hasState(userId)?
    |
    YES v
    getState(userId) → PendingUserDescription(url, note)
@@ -272,7 +276,7 @@ CommandHandler.hasState(userId) == true?
    "✅ Saved! ..."
 
    NO
-   (State expired) → Ignore message
+   (not a reply to bot, or state expired) → Ignore message
 ```
 
 ---
@@ -358,5 +362,5 @@ Schema managed by Flyway:
 | 7 | ✅ | Persist to PostgreSQL with JSONB |
 | 8 | ✅ | /query with pgvector semantic search + conversational AI answer |
 | 9 | ✅ | /list, /delete, /reset + admin controls |
-| 10 | — | Error handling, edge cases, resilience |
-| 11 | — | Deploy to Render + Neon PostgreSQL |
+| 10 | ✅ | Error handling, edge cases, resilience |
+| 11 | ✅ | Webhook mode, conversation state refactor, deploy to Render + Neon |
