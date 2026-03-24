@@ -29,6 +29,7 @@ public class CommandHandlerServiceImpl implements CommandHandlerService {
             /list — show 10 most recently saved items
             /delete <id> — delete an entry (admin only)
             /reset — clear all group data (admin only)
+            /ping — wake up the bot
             /help — show this message
             """;
 
@@ -58,6 +59,9 @@ public class CommandHandlerServiceImpl implements CommandHandlerService {
         }
         if (text.startsWith("/reset")) {
             return handleReset(user, group);
+        }
+        if (text.startsWith("/ping")) {
+            return "I'm up and running! ✅";
         }
         if (text.startsWith("/help") || text.equals("/start")) {
             return HELP_TEXT;
